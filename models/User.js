@@ -1,14 +1,17 @@
 var mongoose = require('mongoose');
 var bcrypt = require('bcrypt-nodejs');
+var crypto = require('crypto');
 
 var userSchema = new mongoose.Schema({
-  email: { type: String, unique: true },
+  email: { type: String, unique: true, lowercase: true },
   password: String,
 
-  facebook: { type: String, unique: true, sparse: true },
-  twitter: { type: String, unique: true, sparse: true },
-  google: { type: String, unique: true, sparse: true },
-  github: { type: String, unique: true, sparse: true },
+  facebook: String,
+  twitter: String,
+  google: String,
+  github: String,
+  instagram: String,
+  linkedin: String,
   tokens: Array,
 
   profile: {
@@ -17,20 +20,23 @@ var userSchema = new mongoose.Schema({
     location: { type: String, default: '' },
     website: { type: String, default: '' },
     picture: { type: String, default: '' }
-  }
+  },
+
+  resetPasswordToken: String,
+  resetPasswordExpires: Date
 });
 
 /**
  * Hash the password for security.
+ * "Pre" is a Mongoose middleware that executes before each user.save() call.
  */
 
 userSchema.pre('save', function(next) {
   var user = this;
-  var SALT_FACTOR = 5;
 
   if (!user.isModified('password')) return next();
 
-  bcrypt.genSalt(SALT_FACTOR, function(err, salt) {
+  bcrypt.genSalt(5, function(err, salt) {
     if (err) return next(err);
 
     bcrypt.hash(user.password, salt, null, function(err, hash) {
@@ -41,11 +47,33 @@ userSchema.pre('save', function(next) {
   });
 });
 
+/**
+ * Validate user's password.
+ * Used by Passport-Local Strategy for password validation.
+ */
+
 userSchema.methods.comparePassword = function(candidatePassword, cb) {
   bcrypt.compare(candidatePassword, this.password, function(err, isMatch) {
-    if(err) return cb(err);
+    if (err) return cb(err);
     cb(null, isMatch);
   });
+};
+
+/**
+ * Get URL to a user's gravatar.
+ * Used in Navbar and Account Management page.
+ */
+
+userSchema.methods.gravatar = function(size, defaults) {
+  if (!size) size = 200;
+  if (!defaults) defaults = 'retro';
+
+  if (!this.email) {
+    return 'https://gravatar.com/avatar/?s=' + size + '&d=' + defaults;
+  }
+
+  var md5 = crypto.createHash('md5').update(this.email);
+  return 'https://gravatar.com/avatar/' + md5.digest('hex').toString() + '?s=' + size + '&d=' + defaults;
 };
 
 module.exports = mongoose.model('User', userSchema);
